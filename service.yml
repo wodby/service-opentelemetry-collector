@@ -48,6 +48,20 @@ links:
   - type: service
     labels:
     - tempo
+- name: loki
+  title: Grafana Loki
+  required: false
+  selectors:
+  - type: service
+    labels:
+    - loki
+- name: victoria-metrics
+  title: VictoriaMetrics
+  required: false
+  selectors:
+  - type: service
+    labels:
+    - victoria-metrics
 
 configs:
 - name: config
