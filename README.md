@@ -12,7 +12,9 @@ configuration for OpenTelemetry Collector.
 
 ## Wodby stacks using this service
 
+- [Grafana Loki application stack](https://github.com/wodby/stack-loki)
 - [Grafana Tempo application stack](https://github.com/wodby/stack-tempo)
+- [VictoriaMetrics application stack](https://github.com/wodby/stack-victoria-metrics)
 
 ## Service overview
 
@@ -24,15 +26,16 @@ configuration for OpenTelemetry Collector.
 | Workloads | `main` (Deployment, primary) |
 | Containers | `otelcol` using `otel/opentelemetry-collector-contrib` |
 | Endpoints | `otlp`: HTTP 4318 (main), TCP 4317 |
-| Service links | Grafana Tempo (`tempo`), optional |
+| Service links | Grafana Tempo (`tempo`), Grafana Loki (`loki`), VictoriaMetrics (`victoria-metrics`), optional |
 | Application build | Not buildable from application source |
 | Helm | chart `oci://registry-1.docker.io/wodby/stateless`; version `0.4.0` |
 | Configuration and operations | 1 configuration files |
 
 ## Use this service
 
-Use this service through [Grafana Tempo application stack](https://github.com/wodby/stack-tempo), or reference
-`opentelemetry-collector` from a custom Wodby stack.
+Use this service through [Grafana Loki application stack](https://github.com/wodby/stack-loki), [Grafana Tempo application stack](https://github.com/wodby/stack-tempo),
+[VictoriaMetrics application stack](https://github.com/wodby/stack-victoria-metrics), or reference `opentelemetry-collector` from a custom Wodby
+stack.
 
 A service is a reusable component and does not deploy by itself. The stack
 defines its links, settings, versions, resources, and relationship to the rest

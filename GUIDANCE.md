@@ -38,6 +38,9 @@ the Java agent.
 - Processors: `memory_limiter` (refuses data above 80% of the container memory limit) and `batch`.
 - Exporter: `otlp_grpc/tempo` to port `4317` of the service linked as `tempo`, without TLS inside the environment.
   Without a `tempo` link the Collector still starts, but it cannot deliver traces and logs `Exporting failed`.
+- Links: `tempo`, `loki` and `victoria-metrics`, all optional. The default configuration uses only `tempo`. Stacks
+  that pair the Collector with Grafana Loki or VictoriaMetrics replace the configuration with a logs or metrics
+  pipeline that exports to the linked service.
 - The `health_check` extension answers on port `13133`; Kubernetes probes use it.
 - The container runs as user `10001`, not root. The image has no shell.
 - The service is scalable: replicas share no state with the default configuration.
@@ -57,7 +60,10 @@ Common changes:
   `headers`, and list it in `service.pipelines.traces.exporters`. Put the vendor key in a secret environment variable
   of the service and reference it with `${env:NAME}`.
 - Accept metrics or logs: add `metrics` or `logs` pipelines with the `otlp` receiver and an exporter for a backend
-  that stores them.
+  that stores them. For a linked Grafana Loki, use an `otlp_http` exporter with
+  `endpoint: http://{{links.loki.host}}:{{links.loki.port}}/otlp`. For a linked VictoriaMetrics, use an `otlp_http`
+  exporter with `metrics_endpoint: http://{{links.victoria-metrics.host}}:{{links.victoria-metrics.port}}/opentelemetry/v1/metrics`.
+  VictoriaMetrics keeps OpenTelemetry attribute names, so queries use labels such as `{"service.name"="api"}`.
 - Sampling: add the `tail_sampling` or `probabilistic_sampler` processor before `batch`. Tail sampling needs all spans
   of a trace on one replica, so keep one replica with it.
 
