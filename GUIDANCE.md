@@ -45,7 +45,7 @@ the Java agent.
 ## Changing configuration
 
 Edit the `config` entry of the app service, not the file in the container. The Collector reads the file only when it
-starts: after saving a change, deploy the service with force deployment so the pods restart. Keep the
+starts: after saving a change, deploy the service. Wodby restarts the pods when the file changed. Keep the
 `bearertokenauth` extension on the receivers while port `4318` has a public domain.
 
 The file is processed for Wodby tokens such as `{{links.tempo.host}}`. Write Collector environment references as
