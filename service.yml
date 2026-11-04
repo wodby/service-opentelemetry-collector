@@ -1,0 +1,131 @@
+name: opentelemetry-collector
+title: OpenTelemetry Collector
+guidance: GUIDANCE.md
+icon: opentelemetry
+type: service
+scalable: true
+
+labels:
+- opentelemetry-collector
+- otlp
+- tracing
+- observability
+
+options:
+- version: '0'
+  tag: '0.164.0'
+  default: true
+
+endpoints:
+- name: otlp
+  ports:
+  # OTLP over HTTP. It is public so applications in other environments can send telemetry; every request needs the
+  # ingest token.
+  - name: otlp-http
+    number: 4318
+    protocol: http
+    main: true
+  - name: otlp-grpc
+    number: 4317
+    protocol: tcp
+    private: true
+
+tokens:
+- name: ingest_token
+  generate:
+    regex: '[A-Za-z0-9]{48}'
+
+env:
+- name: OTLP_INGEST_TOKEN
+  value: '{{ingest_token}}'
+  secret: true
+
+links:
+- name: tempo
+  title: Grafana Tempo
+  required: false
+  selectors:
+  - type: service
+    labels:
+    - tempo
+
+configs:
+- name: config
+  title: Collector config
+  config: config.yaml
+  processTokens: true
+  filepath: /etc/otelcol-contrib/wodby.yaml
+
+helm:
+  name: wodby
+  source: oci://registry-1.docker.io/wodby/stateless
+  chart: oci://registry-1.docker.io/wodby/stateless
+  version: 0.4.0
+  valueMappings:
+    replicas: replicaCount
+    serviceAccountName: serviceAccount.name
+    serviceAccountCreate: serviceAccount.create
+  values:
+  - name: containerName
+    value: otelcol
+  - name: args
+    value:
+    - --config=/etc/otelcol-contrib/wodby.yaml
+  - name: containerPorts
+    value:
+    - name: otlp-http
+      containerPort: 4318
+      protocol: TCP
+    - name: otlp-grpc
+      containerPort: 4317
+      protocol: TCP
+    - name: health
+      containerPort: 13133
+      protocol: TCP
+  - name: securityContext
+    value:
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 10001
+      runAsGroup: 10001
+  # The health_check extension answers on port 13133 once every pipeline has started.
+  - name: startupProbe
+    value:
+      httpGet:
+        path: /
+        port: health
+      failureThreshold: 30
+      periodSeconds: 2
+  - name: readinessProbe
+    value:
+      httpGet:
+        path: /
+        port: health
+      periodSeconds: 10
+  - name: livenessProbe
+    value:
+      httpGet:
+        path: /
+        port: health
+      periodSeconds: 20
+      timeoutSeconds: 5
+      failureThreshold: 6
+
+workloads:
+- name: main
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: '{{helm.release}}'
+  kind: deployment
+  primary: true
+  helm:
+    labels: podLabels
+    annotations: podAnnotations
+    volumes: extraVolumes
+  containers:
+  - name: otelcol
+    image: otel/opentelemetry-collector-contrib
+    helm:
+      resources: resources
+      env: envVars
+      mounts: extraVolumeMounts
