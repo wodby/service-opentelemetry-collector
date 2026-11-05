@@ -32,12 +32,29 @@ The default configuration has a traces pipeline only. OTLP metrics and logs get 
 `OTEL_METRICS_EXPORTER=none` and `OTEL_LOGS_EXPORTER=none` for SDKs and agents that export them by default, such as
 the Java agent.
 
+## Forwarding from an application
+
+Wodby app stacks for application runtimes include this service as `otel-collector`, disabled by default. There it
+runs next to the application with a configuration that forwards traces, metrics and logs elsewhere, and the stack keeps
+port `4318` private.
+
+- The application's `otel` link sets `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL` and
+  `OTEL_EXPORTER_OTLP_HEADERS` (with the ingest token) when the Collector is enabled.
+- Setting `upstream_endpoint` (`OTLP_UPSTREAM_ENDPOINT`) is the OTLP/HTTP base URL to forward to, such as the public
+  domain of the Collector in a Grafana Tempo app. The Collector exits with `at least one endpoint must be specified`
+  until it is set.
+- Setting `upstream_authorization` (`OTLP_UPSTREAM_AUTHORIZATION`, secret) is sent as the `Authorization` header, such
+  as `Bearer <ingest token of the upstream Collector>`.
+- The forwarding configuration has traces, metrics and logs pipelines. If the upstream accepts only some signals,
+  remove the other pipelines, or turn off the exporters in the application's SDK.
+
 ## What is configured
 
 - Receivers: OTLP over gRPC (`4317`) and HTTP (`4318`), both with bearer-token authentication.
 - Processors: `memory_limiter` (refuses data above 80% of the container memory limit) and `batch`.
 - Exporter: `otlp_grpc/tempo` to port `4317` of the service linked as `tempo`, without TLS inside the environment.
   Without a `tempo` link the Collector still starts, but it cannot deliver traces and logs `Exporting failed`.
+- Settings: `upstream_endpoint` and `upstream_authorization`, used only by forwarding configurations.
 - Links: `tempo`, `loki` and `victoria-metrics`, all optional. The default configuration uses only `tempo`. Stacks
   that pair the Collector with Grafana Loki or VictoriaMetrics replace the configuration with a logs or metrics
   pipeline that exports to the linked service.

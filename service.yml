@@ -40,6 +40,21 @@ env:
   value: '{{ingest_token}}'
   secret: true
 
+# Used by configurations that forward telemetry to another Collector or backend, such as the one in Wodby app stacks.
+# The default configuration does not read them.
+settings:
+- name: upstream_endpoint
+  title: Upstream OTLP endpoint
+  description: Base URL that a forwarding configuration sends traces, metrics and logs to over OTLP/HTTP, such as the public domain of a Collector in another app. Leave empty when this Collector stores data in linked services.
+  placeholder: https://collector.example.com
+  var: OTLP_UPSTREAM_ENDPOINT
+- name: upstream_authorization
+  title: Upstream Authorization header
+  description: Value of the Authorization header sent to the upstream endpoint, such as Bearer followed by the ingest token of the upstream Collector.
+  placeholder: Bearer <token>
+  secret: true
+  var: OTLP_UPSTREAM_AUTHORIZATION
+
 links:
 - name: tempo
   title: Grafana Tempo
