@@ -154,6 +154,10 @@ workloads:
   containers:
   - name: otelcol
     image: otel/opentelemetry-collector-contrib
+    resources:
+      request:
+        cpu: 10
+        memory: 48
     helm:
       resources: resources
       env: envVars
