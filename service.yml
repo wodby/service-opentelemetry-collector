@@ -40,43 +40,158 @@ env:
   value: '{{ingest_token}}'
   secret: true
 
-# Used by configurations that forward telemetry to another Collector or backend, such as the one in Wodby app stacks.
-# The default configuration does not read them.
-settings:
-- name: upstream_endpoint
-  title: Upstream OTLP endpoint
-  description: Base URL that a forwarding configuration sends traces, metrics and logs to over OTLP/HTTP, such as the public domain of a Collector in another app. Leave empty when this Collector stores data in linked services.
-  placeholder: https://collector.example.com
-  var: OTLP_UPSTREAM_ENDPOINT
-- name: upstream_authorization
-  title: Upstream Authorization header
-  description: Value of the Authorization header sent to the upstream endpoint, such as Bearer followed by the ingest token of the upstream Collector.
-  placeholder: Bearer <token>
-  secret: true
-  var: OTLP_UPSTREAM_AUTHORIZATION
-
 links:
-- name: tempo
-  title: Grafana Tempo
-  required: false
+# Where every signal goes unless traces, metrics or logs name another destination: a Collector here, in another app,
+# or a custom OTLP endpoint.
+- name: upstream
+  title: Upstream
+  crossApp: true
+  custom: true
   selectors:
+  - type: service
+    labels:
+    - opentelemetry-collector
+  values:
+  - name: endpoint
+    title: OTLP endpoint
+    from: '{{link.exports.otlp_http_endpoint}}'
+  - name: authorization
+    title: Authorization header
+    secret: true
+    optional: true
+    from: '{{link.exports.otlp_http_authorization}}'
+  env:
+  - name: OTLP_TRACES_ENDPOINT
+    value: '{{link.values.endpoint}}'
+  - name: OTLP_TRACES_AUTHORIZATION
+    value: '{{link.values.authorization}}'
+    secret: true
+  - name: OTLP_TRACES_EXPORTERS
+    value: '[otlp_http/traces]'
+  - name: OTLP_METRICS_ENDPOINT
+    value: '{{link.values.endpoint}}'
+  - name: OTLP_METRICS_AUTHORIZATION
+    value: '{{link.values.authorization}}'
+    secret: true
+  - name: OTLP_METRICS_EXPORTERS
+    value: '[otlp_http/metrics]'
+  - name: OTLP_LOGS_ENDPOINT
+    value: '{{link.values.endpoint}}'
+  - name: OTLP_LOGS_AUTHORIZATION
+    value: '{{link.values.authorization}}'
+    secret: true
+  - name: OTLP_LOGS_EXPORTERS
+    value: '[otlp_http/logs]'
+  # Read by the forwarding configuration of app stacks released before these links.
+  - name: OTLP_UPSTREAM_ENDPOINT
+    value: '{{link.values.endpoint}}'
+  - name: OTLP_UPSTREAM_AUTHORIZATION
+    value: '{{link.values.authorization}}'
+    secret: true
+# Overrides upstream for traces. Declared after upstream, so its variables win.
+- name: traces
+  title: Traces
+  crossApp: true
+  custom: true
+  selectors:
+  - type: service
+    labels:
+    - opentelemetry-collector
   - type: service
     labels:
     - tempo
-- name: loki
-  title: Grafana Loki
-  required: false
+  values:
+  - name: endpoint
+    title: OTLP endpoint
+    from: '{{link.exports.otlp_http_endpoint}}'
+  - name: authorization
+    title: Authorization header
+    secret: true
+    optional: true
+    from: '{{link.exports.otlp_http_authorization}}'
+  env:
+  - name: OTLP_TRACES_ENDPOINT
+    value: '{{link.values.endpoint}}'
+  - name: OTLP_TRACES_AUTHORIZATION
+    value: '{{link.values.authorization}}'
+    secret: true
+  - name: OTLP_TRACES_EXPORTERS
+    value: '[otlp_http/traces]'
+# Overrides upstream for metrics.
+- name: metrics
+  title: Metrics
+  crossApp: true
+  custom: true
   selectors:
   - type: service
     labels:
-    - loki
-- name: victoria-metrics
-  title: VictoriaMetrics
-  required: false
-  selectors:
+    - opentelemetry-collector
   - type: service
     labels:
     - victoria-metrics
+  values:
+  - name: endpoint
+    title: OTLP endpoint
+    from: '{{link.exports.otlp_http_endpoint}}'
+  - name: authorization
+    title: Authorization header
+    secret: true
+    optional: true
+    from: '{{link.exports.otlp_http_authorization}}'
+  env:
+  - name: OTLP_METRICS_ENDPOINT
+    value: '{{link.values.endpoint}}'
+  - name: OTLP_METRICS_AUTHORIZATION
+    value: '{{link.values.authorization}}'
+    secret: true
+  - name: OTLP_METRICS_EXPORTERS
+    value: '[otlp_http/metrics]'
+# Overrides upstream for logs.
+- name: logs
+  title: Logs
+  crossApp: true
+  custom: true
+  selectors:
+  - type: service
+    labels:
+    - opentelemetry-collector
+  - type: service
+    labels:
+    - loki
+  values:
+  - name: endpoint
+    title: OTLP endpoint
+    from: '{{link.exports.otlp_http_endpoint}}'
+  - name: authorization
+    title: Authorization header
+    secret: true
+    optional: true
+    from: '{{link.exports.otlp_http_authorization}}'
+  env:
+  - name: OTLP_LOGS_ENDPOINT
+    value: '{{link.values.endpoint}}'
+  - name: OTLP_LOGS_AUTHORIZATION
+    value: '{{link.values.authorization}}'
+    secret: true
+  - name: OTLP_LOGS_EXPORTERS
+    value: '[otlp_http/logs]'
+
+# A Collector has to send somewhere.
+linkGroups:
+- name: destination
+  title: Destination
+  links: [upstream, traces, metrics, logs]
+  min: 1
+
+# Other Collectors, also in other apps, link to this one with these values. {{url.otlp-http}} is the address of the
+# OTLP/HTTP port as the linking service reaches it.
+crossApp: true
+exports:
+- name: otlp_http_endpoint
+  value: '{{url.otlp-http}}'
+- name: otlp_http_authorization
+  value: 'Bearer {{tokens.ingest_token}}'
+  secret: true
 
 configs:
 - name: config

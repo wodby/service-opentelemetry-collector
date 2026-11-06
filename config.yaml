@@ -1,5 +1,9 @@
 # OpenTelemetry Collector (contrib distribution).
 # Reference: https://opentelemetry.io/docs/collector/configuration/
+#
+# Each signal goes to the destination its link sets: traces, metrics or logs, otherwise upstream. The links set
+# OTLP_<SIGNAL>_ENDPOINT, OTLP_<SIGNAL>_AUTHORIZATION and OTLP_<SIGNAL>_EXPORTERS. A signal without a destination is
+# dropped by the nop exporter; its otlp_http exporter keeps a placeholder address so the configuration stays valid.
 extensions:
   health_check:
     endpoint: 0.0.0.0:13133
@@ -28,11 +32,19 @@ processors:
   batch: {}
 
 exporters:
-  # The linked Tempo service in this environment.
-  otlp_grpc/tempo:
-    endpoint: {{links.tempo.host}}:4317
-    tls:
-      insecure: true
+  nop: {}
+  otlp_http/traces:
+    endpoint: ${env:OTLP_TRACES_ENDPOINT:-http://0.0.0.0:9}
+    headers:
+      Authorization: ${env:OTLP_TRACES_AUTHORIZATION:-}
+  otlp_http/metrics:
+    endpoint: ${env:OTLP_METRICS_ENDPOINT:-http://0.0.0.0:9}
+    headers:
+      Authorization: ${env:OTLP_METRICS_AUTHORIZATION:-}
+  otlp_http/logs:
+    endpoint: ${env:OTLP_LOGS_ENDPOINT:-http://0.0.0.0:9}
+    headers:
+      Authorization: ${env:OTLP_LOGS_AUTHORIZATION:-}
 
 service:
   extensions: [health_check, bearertokenauth]
@@ -40,4 +52,12 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [otlp_grpc/tempo]
+      exporters: ${env:OTLP_TRACES_EXPORTERS:-[nop]}
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: ${env:OTLP_METRICS_EXPORTERS:-[nop]}
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: ${env:OTLP_LOGS_EXPORTERS:-[nop]}
