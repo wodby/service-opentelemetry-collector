@@ -2,8 +2,8 @@
 
 What Wodby sets up for the OpenTelemetry Collector on this service. It runs the official contrib distribution,
 `otel/opentelemetry-collector-contrib`, with the configuration file from the `config` entry mounted at
-`/etc/otelcol-contrib/wodby.yaml`. The Collector receives traces over OTLP and forwards them to a linked Grafana Tempo
-service.
+`/etc/otelcol-contrib/wodby.yaml`. The Collector receives traces, metrics and logs over OTLP and sends each signal to
+the destination its links name.
 
 ## How applications send traces
 
@@ -28,36 +28,40 @@ OTEL_SERVICE_NAME=<application name>
 Store the header variable as a secret. The space after `Bearer` is written as `%20` because SDKs URL-decode header
 values.
 
-The default configuration has a traces pipeline only. OTLP metrics and logs get `404`, so set
-`OTEL_METRICS_EXPORTER=none` and `OTEL_LOGS_EXPORTER=none` for SDKs and agents that export them by default, such as
-the Java agent.
+## Destinations
+
+Four links decide where data goes. Each can point at a service in this environment, at a Collector in another app
+(`crossApp`), or at a custom target whose OTLP endpoint and Authorization header a user enters.
+
+- `upstream`: where every signal goes by default. Accepts another Collector.
+- `traces`, `metrics`, `logs`: override `upstream` for one signal. `traces` also accepts Grafana Tempo, `metrics`
+  VictoriaMetrics, and `logs` Grafana Loki.
+
+At least one of the four must be set while the service is enabled (link group `destination`); otherwise Wodby reports a
+missing required link instead of starting a Collector with nowhere to send. A signal with no destination is dropped.
+
+Each link reads the target's exports `otlp_http_endpoint` and `otlp_http_authorization` and sets
+`OTLP_<SIGNAL>_ENDPOINT`, `OTLP_<SIGNAL>_AUTHORIZATION` (secret) and `OTLP_<SIGNAL>_EXPORTERS` for `TRACES`, `METRICS`
+and `LOGS`. A target in another app on the same cluster is reached over the private network, which Wodby opens for the
+linked environments only; a target on another cluster is reached over its public domain. `upstream` also sets
+`OTLP_UPSTREAM_ENDPOINT` and `OTLP_UPSTREAM_AUTHORIZATION` for older forwarding configurations.
+
+This service exports the same two values, so other Collectors can link to it, also from other apps.
 
 ## Forwarding from an application
 
-Wodby app stacks for application runtimes include this service as `otel-collector`, disabled by default. There it
-runs next to the application with a configuration that forwards traces, metrics and logs elsewhere, and the stack keeps
-port `4318` private.
-
-- The application's `otel` link sets `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL` and
-  `OTEL_EXPORTER_OTLP_HEADERS` (with the ingest token) when the Collector is enabled.
-- Setting `upstream_endpoint` (`OTLP_UPSTREAM_ENDPOINT`) is the OTLP/HTTP base URL to forward to, such as the public
-  domain of the Collector in a Grafana Tempo app. The Collector exits with `at least one endpoint must be specified`
-  until it is set.
-- Setting `upstream_authorization` (`OTLP_UPSTREAM_AUTHORIZATION`, secret) is sent as the `Authorization` header, such
-  as `Bearer <ingest token of the upstream Collector>`.
-- The forwarding configuration has traces, metrics and logs pipelines. If the upstream accepts only some signals,
-  remove the other pipelines, or turn off the exporters in the application's SDK.
+Wodby app stacks for application runtimes include this service as `otel-collector`, disabled by default, with port
+`4318` kept private. The application's `otel` link sets `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL` and
+`OTEL_EXPORTER_OTLP_HEADERS` (with the ingest token) while the Collector is enabled. Set its `upstream` link before
+enabling it, usually to the Collector of an Observability app or a custom target for a hosted backend.
 
 ## What is configured
 
 - Receivers: OTLP over gRPC (`4317`) and HTTP (`4318`), both with bearer-token authentication.
 - Processors: `memory_limiter` (refuses data above 80% of the container memory limit) and `batch`.
-- Exporter: `otlp_grpc/tempo` to port `4317` of the service linked as `tempo`, without TLS inside the environment.
-  Without a `tempo` link the Collector still starts, but it cannot deliver traces and logs `Exporting failed`.
-- Settings: `upstream_endpoint` and `upstream_authorization`, used only by forwarding configurations.
-- Links: `tempo`, `loki` and `victoria-metrics`, all optional. The default configuration uses only `tempo`. Stacks
-  that pair the Collector with Grafana Loki or VictoriaMetrics replace the configuration with a logs or metrics
-  pipeline that exports to the linked service.
+- Exporters: `otlp_http/traces`, `otlp_http/metrics` and `otlp_http/logs`, each with the address and Authorization
+  header its link sets, and `nop` for signals without a destination. The pipelines read their exporter lists from
+  `OTLP_<SIGNAL>_EXPORTERS`.
 - The `health_check` extension answers on port `13133`; Kubernetes probes use it.
 - The container runs as user `10001`, not root. The image has no shell.
 - The service is scalable: replicas share no state with the default configuration.
@@ -68,19 +72,14 @@ Edit the `config` entry of the app service, not the file in the container. The C
 starts: after saving a change, deploy the service. Wodby restarts the pods when the file changed. Keep the
 `bearertokenauth` extension on the receivers while port `4318` has a public domain.
 
-The file is processed for Wodby tokens such as `{{links.tempo.host}}`. Write Collector environment references as
-`${env:NAME}`.
+The file is processed for Wodby tokens such as `{{links.upstream.values.endpoint}}`. Write Collector environment
+references as `${env:NAME}`.
 
 Common changes:
 
-- Send traces to another backend as well: add an exporter, such as `otlp_http/vendor` with the vendor's `endpoint` and
-  `headers`, and list it in `service.pipelines.traces.exporters`. Put the vendor key in a secret environment variable
+- Send a signal to a second backend as well: add an exporter, such as `otlp_http/vendor` with the vendor's `endpoint`
+  and `headers`, and list it in that signal's pipeline in place of `${env:OTLP_<SIGNAL>_EXPORTERS:-[nop]}`. Put the vendor key in a secret environment variable
   of the service and reference it with `${env:NAME}`.
-- Accept metrics or logs: add `metrics` or `logs` pipelines with the `otlp` receiver and an exporter for a backend
-  that stores them. For a linked Grafana Loki, use an `otlp_http` exporter with
-  `endpoint: http://{{links.loki.host}}:{{links.loki.port}}/otlp`. For a linked VictoriaMetrics, use an `otlp_http`
-  exporter with `metrics_endpoint: http://{{links.victoria-metrics.host}}:{{links.victoria-metrics.port}}/opentelemetry/v1/metrics`.
-  VictoriaMetrics keeps OpenTelemetry attribute names, so queries use labels such as `{"service.name"="api"}`.
 - Sampling: add the `tail_sampling` or `probabilistic_sampler` processor before `batch`. Tail sampling needs all spans
   of a trace on one replica, so keep one replica with it.
 

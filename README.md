@@ -26,7 +26,7 @@ configuration for OpenTelemetry Collector.
 | Workloads | `main` (Deployment, primary) |
 | Containers | `otelcol` using `otel/opentelemetry-collector-contrib` |
 | Endpoints | `otlp`: HTTP 4318 (main), TCP 4317 |
-| Service links | Grafana Tempo (`tempo`), Grafana Loki (`loki`), VictoriaMetrics (`victoria-metrics`), optional |
+| Service links | Upstream (`upstream`), Traces (`traces`), Metrics (`metrics`), Logs (`logs`); at least one required |
 | Application build | Not buildable from application source |
 | Helm | chart `oci://registry-1.docker.io/wodby/stateless`; version `0.4.0` |
 | Configuration and operations | 1 configuration files |
