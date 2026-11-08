@@ -273,6 +273,9 @@ workloads:
       request:
         cpu: 10
         memory: 48
+      # memory_limiter refuses data above 80% of this limit; without one it would use the node's memory.
+      limit:
+        memory: 512
     helm:
       resources: resources
       env: envVars
